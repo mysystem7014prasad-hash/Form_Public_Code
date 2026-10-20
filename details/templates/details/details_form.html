@@ -1,265 +1,83 @@
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Participant Registration</title>
+from django.shortcuts import render
+from django.db import IntegrityError, transaction
+from .forms import DetailsForm
+from .models import StudentDetails
+import secrets
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
 
-        body {
-            font-family: Arial, Helvetica, sans-serif;
-            background: #f1f5f9;
-            color: #1e293b;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 25px;
-        }
+def details_form(request):
+    if request.method == "POST":
+        form = DetailsForm(request.POST)
 
-        .container {
-            width: 100%;
-            max-width: 850px;
-            background: #ffffff;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 35px rgba(15, 23, 42, 0.12);
-            animation: fadeIn 0.6s ease;
-        }
+        if form.is_valid():
+            rollno = form.cleaned_data["rollno"]
 
-        .header {
-            background: #102a56;
-            color: white;
-            text-align: center;
-            padding: 30px 20px;
-        }
+            # Check for duplicate Roll Number
+            if StudentDetails.objects.filter(rollno=rollno).exists():
+                form.add_error(
+                    "rollno",
+                    "This Roll No is already registered."
+                )
 
-        .header h1 {
-            font-size: 30px;
-            margin-bottom: 10px;
-        }
+            else:
+                candidate_name = form.cleaned_data["name"].strip()
+                first_name = candidate_name.split()[0]
 
-        .header p {
-            font-size: 16px;
-            color: #dbeafe;
-            line-height: 1.5;
-        }
+                # First four letters of the first name
+                prefix = "".join(
+                    character
+                    for character in first_name.upper()
+                    if character.isalpha()
+                )[:4]
 
-        .form-container {
-            padding: 30px;
-        }
+                # Handle names shorter than four letters
+                prefix = prefix.ljust(4, "X")
 
-        .form-title {
-            font-size: 24px;
-            color: #102a56;
-            margin-bottom: 8px;
-        }
+                student = None
 
-        .form-description {
-            color: #64748b;
-            font-size: 14px;
-            margin-bottom: 25px;
-        }
+                # Generate and save a unique enrollment ID
+                for _ in range(20):
+                    digits = f"{secrets.randbelow(10000):04d}"
+                    enrollment_id = f"{prefix}{digits}"
 
-        .form-group {
-            margin-bottom: 18px;
-        }
+                    try:
+                        with transaction.atomic():
+                            student = StudentDetails.objects.create(
+                                rollno=rollno,
+                                name=candidate_name,
+                                email=form.cleaned_data["email"],
+                                phone=form.cleaned_data["phone"],
+                                address=form.cleaned_data["address"],
+                                course=form.cleaned_data["course"],
+                                enrollment_id=enrollment_id,
+                            )
 
-        label {
-            display: block;
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #334155;
-        }
+                        break
 
-        input,
-        select,
-        textarea {
-            width: 100%;
-            padding: 12px 14px;
-            font-size: 15px;
-            font-family: inherit;
-            color: #1e293b;
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
+                    except IntegrityError:
+                        # Retry if the enrollment ID already exists
+                        continue
 
-        input,
-        select {
-            min-height: 44px;
-        }
+                if student is not None:
+                    return render(
+                        request,
+                        "details/success.html",
+                        {
+                            "enrollment_id": student.enrollment_id,
+                        }
+                    )
 
-        input:focus,
-        select:focus,
-        textarea:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-        }
+                form.add_error(
+                    None,
+                    "Unable to generate a unique enrollment ID. Please try again."
+                )
 
-        /* Smaller Address text area */
-        textarea[name="address"] {
-            height: 60px;
-            min-height: 60px;
-            padding: 8px 12px;
-            font-size: 14px;
-            resize: vertical;
-        }
+    else:
+        form = DetailsForm()
 
-        .errorlist {
-            list-style: none;
-            color: #dc2626;
-            font-size: 13px;
-            margin-top: 6px;
-        }
-
-        .error-message {
-            background: #fef2f2;
-            color: #b91c1c;
-            border: 1px solid #fecaca;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 18px;
-        }
-
-        .submit-button {
-            width: 100%;
-            padding: 14px;
-            margin-top: 8px;
-            border: none;
-            border-radius: 8px;
-            background: #1d4ed8;
-            color: #ffffff;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.2s;
-        }
-
-        .submit-button:hover {
-            background: #1e40af;
-            transform: translateY(-2px);
-        }
-
-        .submit-button:active {
-            transform: translateY(0);
-        }
-
-        .footer {
-            text-align: center;
-            padding: 18px;
-            background: #f8fafc;
-            color: #64748b;
-            font-size: 13px;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(12px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @media (max-width: 600px) {
-            body {
-                padding: 12px;
-                align-items: flex-start;
-            }
-
-            .header {
-                padding: 24px 15px;
-            }
-
-            .header h1 {
-                font-size: 23px;
-            }
-
-            .header p {
-                font-size: 14px;
-            }
-
-            .form-container {
-                padding: 20px 16px;
-            }
-
-            .form-title {
-                font-size: 21px;
-            }
-        }
-    </style>
-</head>
-
-<body>
-    <div class="container">
-
-        <div class="header">
-            <h1>State-Level Cultural Competition</h1>
-            <p>Showcase your talent and celebrate creativity</p>
-        </div>
-
-        <div class="form-container">
-            <h2 class="form-title">Participant Registration</h2>
-            <p class="form-description">
-                Fill in the details below to register for the competition.
-            </p>
-
-            <form method="POST">
-                {% csrf_token %}
-
-                {% if form.non_field_errors %}
-                    <div class="error-message">
-                        {{ form.non_field_errors }}
-                    </div>
-                {% endif %}
-
-                {% for field in form %}
-                    <div class="form-group">
-                        <label for="{{ field.id_for_label }}">
-                            {{ field.label }}
-                        </label>
-
-                        {{ field }}
-
-                        {% if field.help_text %}
-                            <small>{{ field.help_text }}</small>
-                        {% endif %}
-
-                        {% if field.errors %}
-                            <ul class="errorlist">
-                                {% for error in field.errors %}
-                                    <li>{{ error }}</li>
-                                {% endfor %}
-                            </ul>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-
-                <button type="submit" class="submit-button">
-                    Register Participant
-                </button>
-            </form>
-        </div>
-
-        <div class="footer">
-            State-Level Cultural Competition | Participant Registration
-        </div>
-
-    </div>
-</body>
-</html>
+    return render(
+        request,
+        "details/details_form.html",
+        {"form": form},
+    )

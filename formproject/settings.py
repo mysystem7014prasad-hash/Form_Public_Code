@@ -4,6 +4,7 @@ Django settings for formproject project.
 """
 
 import os
+import dj_database_url
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -33,7 +34,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 if render_hostname:
-    CSRF_TRUSTED_ORIGINS.append(f"https://{render_hostname}")
+    CSRF_TRUSTED_ORIGINS.append(
+        f"https://{render_hostname}"
+    )
 
 # Application definition
 INSTALLED_APPS = [
@@ -78,13 +81,25 @@ TEMPLATES = [
 WSGI_APPLICATION = "formproject.wsgi.application"
 
 # Database
-# SQLite is retained from your original project.
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# Render uses PostgreSQL when DATABASE_URL is set.
+# Local development uses SQLite when DATABASE_URL is absent.
+database_url = os.environ.get("DATABASE_URL")
+
+if database_url:
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -124,7 +139,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Email configuration retained from your original settings.
+# Email configuration
 MAILERS = {
     "default": {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",

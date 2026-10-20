@@ -13,11 +13,13 @@ def details_form(request):
         if form.is_valid():
             rollno = form.cleaned_data["rollno"]
 
+            # Check for duplicate Roll Number
             if StudentDetails.objects.filter(rollno=rollno).exists():
                 form.add_error(
                     "rollno",
                     "This Roll No is already registered."
                 )
+
             else:
                 candidate_name = form.cleaned_data["name"].strip()
                 first_name = candidate_name.split()[0]
@@ -26,16 +28,18 @@ def details_form(request):
                 prefix = "".join(
                     character
                     for character in first_name.upper()
-                    if character.isalnum()
+                    if character.isalpha()
                 )[:4]
 
-                prefix = prefix or "USER"
+                # Handle names shorter than four letters
+                prefix = prefix.ljust(4, "X")
 
-                # Save the registration and generate a unique enrollment ID
+                student = None
+
+                # Generate and save a unique enrollment ID
                 for _ in range(20):
-                    enrollment_id = (
-                        f"{prefix}{secrets.randbelow(9000) + 1000}"
-                    )
+                    digits = f"{secrets.randbelow(10000):04d}"
+                    enrollment_id = f"{prefix}{digits}"
 
                     try:
                         with transaction.atomic():
@@ -46,24 +50,16 @@ def details_form(request):
                                 phone=form.cleaned_data["phone"],
                                 address=form.cleaned_data["address"],
                                 course=form.cleaned_data["course"],
+                                enrollment_id=enrollment_id,
                             )
-
-                            # Requires enrollment_id field in your model
-                            student.enrollment_id = enrollment_id
-                            student.save(update_fields=["enrollment_id"])
 
                         break
 
                     except IntegrityError:
                         # Retry if the enrollment ID already exists
                         continue
-                else:
-                    form.add_error(
-                        None,
-                        "Unable to generate an enrollment ID. Please try again."
-                    )
 
-                if not form.errors:
+                if student is not None:
                     return render(
                         request,
                         "details/success.html",
@@ -71,6 +67,11 @@ def details_form(request):
                             "enrollment_id": student.enrollment_id,
                         }
                     )
+
+                form.add_error(
+                    None,
+                    "Unable to generate a unique enrollment ID. Please try again."
+                )
 
     else:
         form = DetailsForm()

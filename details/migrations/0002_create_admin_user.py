@@ -1,6 +1,6 @@
 
 import os
-
+from django.contrib.auth.hashers import make_password
 from django.conf import settings
 from django.db import migrations
 
@@ -42,7 +42,7 @@ def create_admin_user(apps, schema_editor):
     user.is_staff = True
     user.is_superuser = True
     user.is_active = True
-    user.set_password(password)
+    user.password = make_password(password)
     user.save(
         using=schema_editor.connection.alias
     )
